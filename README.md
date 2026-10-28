@@ -11,16 +11,10 @@ npm run dev
 
 ## Deploy to GitHub Pages
 
-Vite is configured for this repository's project site:
+The site is configured for:
 `https://Chinaemeze.github.io/Hospital-Management-System---Mock/`
 
-1. From the project root, run this once to build and publish the `gh-pages` branch:
-
-   ```sh
-   npm run deploy
-   ```
-
-2. In the repository settings, open **Pages** and set the source to **Deploy from a branch**.
-3. Select the `gh-pages` branch and the `/(root)` folder, then save.
-
-Run `npm run deploy` again after future updates to publish them.
+GitHub Actions builds the Vite app and deploys the `dist` directory whenever a
+change is pushed to `main`. In the repository settings, set **Pages → Build and
+deployment → Source** to **GitHub Actions**. The workflow can also be started
+manually from the repository's **Actions** tab.
