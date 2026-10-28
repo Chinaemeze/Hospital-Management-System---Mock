@@ -5,5 +5,5 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
     plugins: [react(), tailwindcss()],
-    base: 'Hospital-Management-System---Mock'
+    base: '/Hospital-Management-System---Mock/',
 })
