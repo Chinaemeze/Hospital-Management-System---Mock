@@ -1,0 +1,78 @@
+graph TD
+    %% Styling and colors for readability
+    classDef root fill:#1e1e2f,stroke:#fff,stroke-width:2px,color:#fff;
+    classDef context fill:#2d4263,stroke:#fff,stroke-width:1px,color:#fff;
+    classDef component fill:#0f3460,stroke:#e94560,stroke-width:1px,color:#fff;
+    classDef subcomponent fill:#162447,stroke:#e94560,stroke-width:1px,color:#fff;
+
+    %% Root Application
+    App["App.jsx<br/>(Root Container)"]:::root
+
+    %% Context Layer
+    subgraph Context_Layer ["Context Providers"]
+        HospitalProvider["HospitalProvider<br/>(Wraps State & Dispatch)"]:::context
+    end
+
+    App --> HospitalProvider
+
+    %% Component Tree Structure
+    subgraph Component_Tree ["UI Component Tree"]
+        Header["Header.jsx"]:::component
+        SearchBar["SearchBar.jsx<br/>(Controlled Input)"]:::subcomponent
+        FilterPanel["FilterPanel.jsx<br/>(Status, Priority, Doctor)"]:::subcomponent
+
+        DashboardStats["DashboardStats.jsx<br/>(Derived Stats Cards)"]:::component
+
+        PatientList["PatientList.jsx"]:::component
+        PatientCard["PatientCard.jsx<br/>(React.memoized)"]:::subcomponent
+
+        PatientDetails["PatientDetails.jsx"]:::component
+        DoctorPanel["DoctorPanel.jsx"]:::subcomponent
+        VitalsPanel["VitalsPanel.jsx"]:::subcomponent
+        NotesPanel["NotesPanel.jsx"]:::subcomponent
+        Note["Note.jsx<br/>(React.memoized)"]:::subcomponent
+        ActionPanel["ActionPanel.jsx<br/>(Add / Delete / Actions)"]:::subcomponent
+    end
+
+    HospitalProvider --> Header
+    HospitalProvider --> DashboardStats
+    HospitalProvider --> PatientList
+    HospitalProvider --> PatientDetails
+
+    Header --> SearchBar
+    Header --> FilterPanel
+
+    PatientList --> PatientCard
+
+    PatientDetails --> DoctorPanel
+    PatientDetails --> VitalsPanel
+    PatientDetails --> NotesPanel
+    PatientDetails --> ActionPanel
+
+    NotesPanel --> Note
+
+    %% Architecture & State Flow Connections
+    subgraph State_Architecture ["State & Logic Core"]
+        Reducer["reducer.js<br/>(Single Source of Truth)"]:::context
+        CustomHook["useHospitalDashboard.js<br/>(Derived State & Logic)"]:::context
+        StateContext["HospitalStateContext"]:::context
+        DispatchContext["HospitalDispatchContext"]:::context
+    end
+
+    HospitalProvider -.- StateContext
+    HospitalProvider -.- DispatchContext
+    StateContext -.- CustomHook
+    CustomHook -.- Reducer
+
+    %% Labels for clarity on data flow
+    classDef labelStyle fill:none,stroke:none,color:#f1f1f1;
+    
+    %% Connections explaining architecture flow
+    PatientCard -.->|dispatches action| DispatchContext
+    SearchBar -.->|dispatches SET_SEARCH| DispatchContext
+    FilterPanel -.->|dispatches filters| DispatchContext
+    ActionPanel -.->|dispatches mutations| DispatchContext
+    
+    DashboardStats -.->|reads derived stats| StateContext
+    PatientList -.->|reads filteredPatients| StateContext
+    PatientDetails -.->|reads selectedPatient| StateContext

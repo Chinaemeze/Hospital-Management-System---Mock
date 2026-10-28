@@ -1,0 +1,1073 @@
+APP.jsx:-
+
+import initialState from './initialstate';
+import useHospitalDashboard from './CustomHooks/HospitalDashboardHook';
+import DispatchContext from './ContextFiles/DispatchContext';
+import GeneralStateContext from './ContextFiles/GeneralStateContext';
+import AllDoctorsContext from './ContextFiles/AllDoctorsContext';
+import Header from './Components/Header';
+import PatientsList from './Components/PatientsComponents/PatientList';
+import PatientDetails from './Components/PatientsComponents/PatientDetails';
+import DashboardStats from './Components/DashboardStats';
+import AddNewPatientForm from './Components/AddPatientForm';
+
+function App() {
+  const { generalState, dispatch, phase2FilteredByOptions, patientsStatisticsObject, selectedPatient, allDoctors, allPriorities } = useHospitalDashboard(initialState);
+
+
+  return (
+    <GeneralStateContext.Provider value={generalState}>
+      <DispatchContext.Provider value={dispatch}>
+        <div>
+          <Header />
+          <DashboardStats statistics_object={patientsStatisticsObject} />
+          <PatientsList patients_list={phase2FilteredByOptions} />
+          <AllDoctorsContext.Provider value={allDoctors}>
+            <div>
+              {
+                selectedPatient && <PatientDetails details_object={selectedPatient} />
+              }
+            </div>
+            <AddNewPatientForm all_doctors={allDoctors} all_priorities={allPriorities} dispatch={dispatch} />
+          </AllDoctorsContext.Provider>
+        </div>
+      </DispatchContext.Provider>
+    </GeneralStateContext.Provider>
+  )
+}
+
+export default App
+
+
+================================================================================
+Reducer.jsx:-
+
+function reducer(state, action) {
+    switch (action.type) {
+        case 'SELECT_PATIENT':
+            return {
+                ...state,
+                selectedPatientId: action.id
+            }
+
+        case 'ADD_PATIENT':
+            return {
+                ...state,
+                patients: [...state.patients, action.new_patient_object]
+            }
+
+        case 'DELETE_PATIENT':
+            return {
+                ...state,
+                selectedPatientId: null,
+                patients: state.patients.filter(pat => pat.id !== action.patient_id)
+            }
+
+        case 'CHANGE_STATUS':
+            return {
+                ...state,
+                patients: state.patients.map(pat => {
+                    if (pat.id === action.patient_id) {
+                        return {
+                            ...pat,
+                            status: action.new_status
+                        }
+                    }
+
+                    return pat
+                })
+            }
+
+        case 'CHANGE_PRIORITY':
+            return {
+                ...state,
+                patients: state.patients.map(pat => {
+                    if (pat.id === action.patient_id) {
+                        return {
+                            ...pat,
+                            priority: action.new_priority
+                        }
+                    }
+
+                    return pat
+                })
+            }
+
+        case 'ASSIGN_DOCTOR':
+            return {
+                ...state,
+                patients: state.patients.map(pat => {
+                    if (pat.id === action.patient_id) {
+                        return {
+                            ...pat,
+                            doctorId: action.new_doctor_id
+                        }
+                    }
+
+                    return pat
+                })
+            }
+
+        case 'ADD_NOTE':
+            return {
+                ...state,
+                patients: state.patients.map(pat => {
+                    if (pat.id === action.patient_id) {
+                        return {
+                            ...pat,
+                            notes: [...pat.notes, action.new_note_object]
+                        }
+                    }
+
+                    return pat
+                })
+            }
+
+        case 'UPDATE_VITALS':
+            return {
+                ...state,
+                patients: state.patients.map(pat => {
+                    if (pat.id === action.patient_id) {
+                        return {
+                            ...pat,
+                            vitals: {
+                                ...pat.vitals,
+                                [action.key_of_concern]: action.new_value
+                            }
+                        }
+                    }
+
+                    return pat
+                })
+            }
+
+        case 'SET_SEARCH':
+            return {
+                ...state,
+                search: action.value
+            }
+
+        case 'SET_STATUS_FILTER':
+            return {
+                ...state,
+                statusFilter: action.value
+            }
+
+        case 'SET_PRIORITY_FILTER':
+            return {
+                ...state,
+                priorityFilter: action.value
+            }
+
+        case 'SET_DOCTOR_FILTER':
+            return {
+                ...state,
+                doctorFilter: action.value
+            }
+
+        default:
+            return state
+    }
+}
+
+export default reducer;
+
+===============================================================================
+HospitalDashboardSupportHook.jsx:-
+
+import reducer from "../reducer/ReducerFunction";
+import { useMemo, useReducer } from "react";
+
+function useHospitalDashboard(initial_stateful_data) {
+    // initialise state with reducer
+    const [generalState, dispatch] = useReducer(reducer, initial_stateful_data);
+
+
+
+    const selectedPatient = useMemo(() => {
+        return generalState.patients.find(pat => {
+            return pat.id === generalState.selectedPatientId
+        })
+    }, [generalState.selectedPatientId, generalState.patients]);
+
+    // FIRST PHASE FILTERING
+    const phase1FilteredBySearch = useMemo(() => {
+
+        return generalState.patients.filter(pat => {
+            if (!generalState.search) return true
+            const doctorOfPatient = generalState.doctors.find(doc => doc.id === pat.doctorId);
+
+            const docHasName = doctorOfPatient.name.toLowerCase().replace(/\s+/g, "").includes(generalState.search.toLowerCase().replace(/\s+/g, ""));
+
+            const docHasSpecialty = doctorOfPatient.specialty.toLowerCase().includes(generalState.search.toLowerCase().replace(/\s+/g, ""));
+
+
+            const nameMatch = pat.name.toLowerCase().includes(generalState.search.toLowerCase().replace(/\s+/g, ""));
+
+            return nameMatch || docHasName || docHasSpecialty
+
+        })
+    }, [generalState.search, generalState.patients]);
+
+
+
+    // SECOND PHASE FILTERING
+    const phase2FilteredByOptions = useMemo(() => {
+        // check to see if all filters === 'all'
+        const filtersSetAsAll = (generalState.statusFilter === 'all') && (generalState.priorityFilter === 'all') && (generalState.doctorFilter === 'all');
+        
+
+        return phase1FilteredBySearch.filter(pat => {
+            if (filtersSetAsAll) return true
+
+            
+
+            return (
+                ((generalState.statusFilter === 'all') ? true : (generalState.statusFilter === pat.status))
+                &&
+                ((generalState.doctorFilter === 'all') ? true : (Number(generalState.doctorFilter) === pat.doctorId))
+                &&
+                ((generalState.priorityFilter === 'all') ? true : (generalState.priorityFilter === pat.priority))
+            )
+        })
+    }, [generalState.priorityFilter, generalState.statusFilter, generalState.doctorFilter, phase1FilteredBySearch]);
+
+    // derived statistics
+    const patientsStatisticsObject = useMemo(() => {
+        return generalState.patients.reduce((acc, pat) => {
+            if(pat.priority === 'critical') {
+                acc[pat.priority] = acc[pat.priority] || 0;
+                acc[pat.priority] +=1;
+            }
+
+            if(pat.status === 'waiting' || pat.status === 'discharged') {
+                acc[pat.status] = acc[pat.status] || 0;
+                acc[pat.status] +=1
+            }
+
+            acc['totalNumberOfPatients'] = generalState.patients.length
+
+            return acc
+
+        }, {});
+
+    }, [generalState.patients, selectedPatient])
+
+    const allDoctors = useMemo(() => {
+        return generalState.doctors
+    }, [])
+
+    const allPriorities = useMemo(() => {
+        return generalState.patients.reduce((acc, pat) => {
+            if(!acc.includes(pat.priority)) {
+                acc.push(pat.priority)
+            }
+            return acc
+        }, [])
+    }, [])
+
+
+    //exposed values
+    return {
+        generalState,
+        selectedPatient,
+        dispatch,
+        phase2FilteredByOptions,
+        patientsStatisticsObject,
+        allDoctors,
+        allPriorities
+    }
+}
+
+export default useHospitalDashboard;
+
+===============================================================================
+AllDoctorsContext.jsx:-
+import { createContext } from "react";
+
+const AllDoctorsContext = createContext(null);
+
+export default AllDoctorsContext;
+
+================================================================================
+DispatchContext.jsx:-
+import { createContext } from "react";
+
+const DispatchContext = createContext(null);
+
+export default DispatchContext;
+
+================================================================================
+GeneralStateContext.jsx:-
+import { createContext } from "react";
+
+const GeneralStateContext = createContext(null);
+
+export default GeneralStateContext;
+
+===============================================================================
+Header.jsx:-
+
+import { memo } from "react";
+import FilterPanel from "./HeaderComponents/FilterPanel";
+import SearchBar from "./HeaderComponents/SearchBar";
+
+const Header = memo(function () {
+    return(
+        <div>
+            <FilterPanel />
+            <SearchBar />
+        </div>
+    )
+})
+
+export default Header;
+
+===============================================================================
+DashboardStats.jsx:-
+
+import { memo } from "react";
+
+const DashboardStats = memo(function({ statistics_object }) {
+    return(
+        <div>
+            <h3>Statistics</h3>
+            <p>Total Patients: {statistics_object.totalNumberOfPatients}</p>
+            <p>Critical Cases: {statistics_object.critical}</p>
+            <p>Waiting: {statistics_object.waiting}</p>
+            <p>Discharged: {statistics_object.discharged}</p>
+        </div>
+    )
+});
+
+export default DashboardStats;
+
+================================================================================
+AddPatientForm.jsx:-
+
+import { memo, useCallback, useRef } from "react";
+
+const AddNewPatientForm = memo(function ({ all_doctors, dispatch, all_priorities }) {
+    const generateThreeDigitId = useCallback(() => {
+        return Math.floor(Math.random() * 900) + 100;
+    }, []);
+
+    const newPatientObjectRef = useRef({
+        status: 'waiting'
+    });
+
+    const updateValueInRef = useCallback((target, key_in_ref) => {
+        if (key_in_ref === 'vitals') {
+            newPatientObjectRef.current[key_in_ref] = newPatientObjectRef.current[key_in_ref] || {};
+
+            if (target.id === 'heartRate') {
+                newPatientObjectRef.current[key_in_ref][target.id] = Number(target.value);
+            } else {
+                newPatientObjectRef.current[key_in_ref][target.id] = target.value
+            }
+
+            return
+        }
+
+        if (key_in_ref === 'age' || key_in_ref === 'doctorId') {
+            newPatientObjectRef.current[key_in_ref] = Number(target.value);
+            console.log(newPatientObjectRef.current)
+            return
+        }
+
+        newPatientObjectRef.current[key_in_ref] = target.value;
+
+        // text log
+        console.log(newPatientObjectRef.current)
+    }, []);
+
+    const addPatientInGeneralState = useCallback(() => {
+        if (Object.keys(newPatientObjectRef.current).length !== 6) return
+
+        newPatientObjectRef.current['notes'] = [];
+        newPatientObjectRef.current['id'] = generateThreeDigitId()
+
+        const objectToSend = { ...newPatientObjectRef.current }
+
+        dispatch({
+            type: 'ADD_PATIENT',
+            new_patient_object: objectToSend
+        })
+
+        newPatientObjectRef.current = {
+            status: 'waiting'
+        }
+    }, [])
+
+    const handleKeyDown = useCallback((e) => {
+        const allowed = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '/', 'Backspace'];
+
+        if(!allowed.includes(e.key)) {
+            e.preventDefault()
+        }
+        
+    }, [])
+
+
+
+
+    return (
+        <div>
+            <h3>Add New Patient</h3>
+            {/* for name */}
+            <div>
+                <label htmlFor="new-patient-name">Enter Patient's Name</label>
+                <input type="text" id="new-patient-name" placeholder="Enter new patient's name" data-key="name" onChange={(e) => {
+                    updateValueInRef(e.target, e.target.dataset.key)
+                }} />
+            </div>
+            {/* for age */}
+            <div>
+                <label htmlFor="new-patient-age">Enter Age</label>
+                <input type="number" id="new-patient-age" placeholder="Input patient's age" data-key="age" onChange={(e) => {
+                    updateValueInRef(e.target, e.target.dataset.key)
+                }} />
+            </div>
+            {/* for vitals */}
+            <div onChange={e => { updateValueInRef(e.target, e.target.dataset.key) }} >
+                <label htmlFor="heartRate">Enter HeartRate</label>
+                <input type="number" data-key="vitals" placeholder="Input Heart Rate" id="heartRate" />
+                <br />
+                <label htmlFor="bloodPressure">Enter Blood Pressure</label>
+                <input type="text" id="bloodPressure" data-key="vitals" placeholder="Input blood pressure" onKeyDown={e => handleKeyDown(e)} />
+            </div>
+            {/* for doctor id select  */}
+            <div>
+                <h4>Assign Doctor</h4>
+                <div onChange={e => {
+                    updateValueInRef(e.target, e.target.dataset.key)
+                }}>
+                    {
+                        all_doctors.map(doc => {
+                            return (
+                                <div key={doc.id} >
+                                    <label htmlFor={doc.name}>{doc.name}</label>
+                                    <input type="radio" name="doctors" id={doc.name} value={doc.id} data-key="doctorId" />
+                                </div>
+                            )
+
+                        })
+                    }
+                </div>
+            </div>
+            {/* For priority */}
+            <div>
+                <h4>Assign Priority</h4>
+                <div onChange={e => {
+                    updateValueInRef(e.target, e.target.dataset.key)
+                }}>
+                    {
+                        all_priorities.map((priority, ind) => {
+                            return (
+                                <div key={ind} >
+                                    <label htmlFor={priority}>{priority}</label>
+                                    <input type="radio" name="priority" id={priority} value={priority} data-key="priority" />
+                                </div>
+                            )
+
+                        })
+                    }
+                </div>
+            </div>
+            <button onClick={addPatientInGeneralState} >Add Patient</button>
+
+        </div>
+    );
+})
+
+export default AddNewPatientForm;
+
+================================================================================
+PatientsList.jsx:-
+
+import { memo, useContext } from "react";
+import DispatchContext from "../../ContextFiles/DispatchContext";
+import PatientCard from "./PatientCard";
+
+const  PatientsList = memo(function({ patients_list }) {
+    const dispatch = useContext(DispatchContext);
+    
+    return (
+        <div>
+            {
+                patients_list.map(pat => {
+                    return <PatientCard key={pat.id} patient_object={pat} dispatch={dispatch} />
+                })
+            }
+        </div>
+    );
+}
+)
+export default PatientsList;
+
+
+=================================================================================
+PatientDetails.jsx:-
+
+import { memo, useContext } from "react";
+import AllDoctorsContext from "../../ContextFiles/AllDoctorsContext";
+import DoctorPanel from "./PatientDetailsComponents/DoctorPanel";
+import VitalsPanel from "./PatientDetailsComponents/VitalsPanel";
+import ActionPanel from "./PatientDetailsComponents/ActionPanel";
+import NotesList from "./PatientDetailsComponents/NoteComponents/NotesList";
+
+function PatientDetails({ details_object }) {
+    const doctorConcerned = useContext(AllDoctorsContext).find(doc => {
+        return doc.id === details_object.doctorId
+    })
+
+
+    return (
+        <div>
+            <div>
+                <p>Patient's Name: {details_object.name}</p>
+                <p>Patient's age: {details_object.age}</p>
+                <p>Priority: {details_object.priority}</p>
+                <p>Status: {details_object.status}</p>
+            </div>
+            <DoctorPanel doctor_object={doctorConcerned} />
+            <VitalsPanel vitals_object={details_object.vitals} id_of_patient={details_object.id} />
+            <ActionPanel id_of_patient={details_object.id} />
+            <NotesList notes_list={details_object.notes} id_of_patient={details_object.id} />
+        </div>
+    );
+}
+
+export default PatientDetails;
+
+=================================================================================
+PatientCard.jsx:-
+
+import { memo } from "react";
+
+const PatientCard = memo(function ({ patient_object, dispatch }) {
+    return (
+        <div>
+            <h4>Patient card</h4>
+            <p>
+                Name: {patient_object.name} | Status: {patient_object.status} | Priority: {patient_object.priority}
+                <button onClick={() => {
+                    dispatch({
+                        type: 'SELECT_PATIENT',
+                        id: patient_object.id
+                    })
+                }}>Select</button>
+            </p>
+
+        </div>
+    );
+})
+
+export default PatientCard;
+
+=================================================================================
+VitalsPanel.jsx:-
+
+import { memo, useCallback, useContext, useRef, useState } from "react";
+import DispatchContext from "../../../ContextFiles/DispatchContext";
+
+const VitalsPanel = memo(function ({ vitals_object, id_of_patient }) {
+    const dispatch = useContext(DispatchContext);
+    const [selectedVitals, setSelectedVitals] = useState('');
+    const newValueRef = useRef(null);
+
+    const updateSelectedVitals = useCallback((value) => {
+        setSelectedVitals(value);
+        newValueRef.current = null;
+    }, []);
+
+    const updateVitalsInGeneralState = useCallback((id, vital_key_in_state, newValue) => {
+
+        if (!newValue) return
+
+        dispatch({
+            type: 'UPDATE_VITALS',
+            patient_id: id,
+            new_value: newValue,
+            key_of_concern: vital_key_in_state
+        });
+    }, [])
+
+
+    return (
+        <div>
+            <h4>Vitals</h4>
+            <p>Heart rate: {vitals_object.heartRate}</p>
+            <p>Blood Pressure: {vitals_object.bloodPressure}</p>
+            <div>
+                <h6>Select Vitals to Change</h6>
+                <label htmlFor="heartRate">Heart Rate</label>
+                <input type="radio" name="vitals" id="heartRate" value='heartRate' onChange={e => {
+                    updateSelectedVitals(e.target.value)
+                }} />
+                <label htmlFor="bloodPressure">Blood Pressure</label>
+                <input type="radio" name="vitals" id="bloodPressure" value='bloodPressure' onChange={e => {
+                    updateSelectedVitals(e.target.value)
+                }} />
+            </div>
+
+            {
+                Boolean(selectedVitals)
+                &&
+                (
+                    <div>
+                        <input type={
+                            (selectedVitals === 'heartRate') ? 'number' : 'text'
+                        } placeholder={`Enter New ${selectedVitals}`} onChange={e => {
+                            newValueRef.current = (selectedVitals === 'heartRate') ? Number(e.target.value) : e.target.value;
+                        }} />
+                        <button onClick={() => {
+                            updateVitalsInGeneralState(id_of_patient, selectedVitals, newValueRef.current)
+                        }}>Update {selectedVitals}</button>
+                    </div>
+                )
+            }
+        </div>
+    )
+})
+
+export default VitalsPanel;
+
+================================================================================
+DoctorPanel.jsx:-
+
+import { memo } from "react";
+
+const DoctorPanel = memo(function({ doctor_object }) {
+
+    return(
+        <div>
+            <h4>Assigned Doctor</h4>
+            <p>Name: {doctor_object.name}</p>
+            <p>Specialty: {doctor_object.specialty}</p>
+        </div>
+    )
+})
+
+export default DoctorPanel;
+
+===============================================================================
+ActionPanel.jsx:-
+
+import { memo, useContext, useMemo } from "react";
+import DispatchContext from "../../../ContextFiles/DispatchContext";
+import GeneralStateContext from "../../../ContextFiles/GeneralStateContext";
+import AllDoctorsContext from "../../../ContextFiles/AllDoctorsContext";
+import NewPrioritySelect from "./ActionPanelComponents/NewPrioritySelect";
+import NewStatusSelect from "./ActionPanelComponents/NewStatusSelect";
+import NewDoctorSelect from "./ActionPanelComponents/NewDoctorSelect";
+
+const ActionPanel = memo(function ({ id_of_patient }) {
+    const dispatch = useContext(DispatchContext);
+    const generalState = useContext(GeneralStateContext);
+    const allDoctors = useContext(AllDoctorsContext);
+
+
+    const allOptions = useMemo(() => {
+        return generalState.patients.reduce((acc, pat) => {
+            acc['statuses'] = acc['statuses'] || [];
+            acc['priorities'] = acc['priorities'] || [];
+
+            if (!acc['doctors']) {
+                acc['doctors'] = allDoctors;
+            }
+
+            if (!acc['statuses'].includes(pat.status)) {
+                acc['statuses'].push(pat.status)
+            }
+
+            if (!acc['priorities'].includes(pat.priority)) {
+                acc['priorities'].push(pat.priority)
+            }
+
+            return acc
+
+        }, {})
+    }, [])
+
+    return (
+        <div>
+            <h5>Actions</h5>
+            <div>
+                <div>
+                    <NewPrioritySelect id={id_of_patient} options={allOptions.priorities} dispatch={dispatch} />
+                    <NewStatusSelect id={id_of_patient} options={allOptions.statuses} dispatch={dispatch} />
+                    <NewDoctorSelect id={id_of_patient} list_of_doctors={allOptions.doctors} dispatch={dispatch} />
+                </div>
+                <button onClick={() => {
+                    dispatch({
+                        type: 'DELETE_PATIENT',
+                        patient_id: id_of_patient
+                    })
+                }}>Delete Patient {id_of_patient}</button>
+            </div>
+        </div>
+    )
+})
+
+export default ActionPanel;
+
+=============================================================================== 
+NotesList.jsx:-
+
+import { memo, useCallback, useContext, useRef } from "react";
+import DispatchContext from "../../../../ContextFiles/DispatchContext";
+import Note from "./Note";
+
+const NotesList = memo(function ({ notes_list, id_of_patient }) {
+    const generateNoteId = useCallback(() => {
+        return Math.floor(Math.random() * 900) + 100;
+    }, [])
+
+    const newNoteTextRef = useRef(null);
+
+    const dispatch = useContext(DispatchContext);
+
+    const addNoteInGeneralState = () => {
+        const newNoteObject = {
+            id: generateNoteId(),
+            text: newNoteTextRef.current
+        };
+
+        if(!newNoteTextRef.current) return
+
+        dispatch({
+            type: 'ADD_NOTE',
+            new_note_object: newNoteObject,
+            patient_id: id_of_patient
+        })
+
+    }
+
+    return (
+        <div>
+            <h5>Note List</h5>
+            <ol>
+                {
+                    (!notes_list.length) ?
+                        <p>No Notes yet</p> :
+                        notes_list.map(note => {
+                            return (
+                                <li key={note.id}>
+                                    <Note note_object={note} />
+                                </li>
+                            )
+                        })
+                }
+            </ol>
+
+            <div>
+                <label htmlFor="new-note">Enter Note Text</label>
+                <input type="text" id="new-note" placeholder="Enter New Note" onChange={e => {
+                    newNoteTextRef.current = e.target.value;
+                }} />
+                <button onClick={addNoteInGeneralState}>Add Note</button>
+            </div>
+
+        </div>
+    )
+});
+
+export default NotesList;
+
+================================================================================
+Note.jsx:-
+
+function Note({ note_object }) {
+    return(
+        <div>
+            <p>{note_object.text}</p>
+        </div>
+    )
+}
+
+export default Note;
+
+================================================================================
+NewStatusSelect.jsx:-
+
+import { memo, useRef } from "react";
+
+const NewStatusSelect = memo(function ({ id, options, dispatch }) {
+    const newStatusRef = useRef(null);
+
+    return (
+        <div>
+            <h5>Change Status</h5>
+            {
+                options.map((opt, ind) => {
+                    return (
+                        <div key={ind} >
+                            <label htmlFor={opt}>{opt}</label>
+                            <input type="radio" name="priority" id={opt} value={opt} onChange={e => {
+                                newStatusRef.current = e.target.value;
+                                console.log(newStatusRef.current)
+                            }} />
+                        </div>
+                    )
+                })
+            }
+            <button onClick={() => {
+                dispatch({
+                    type: 'CHANGE_STATUS',
+                    patient_id: id,
+                    new_status: newStatusRef.current
+                })
+                newStatusRef.current = null
+            }}>Change Status</button>
+        </div>
+    );
+})
+
+export default NewStatusSelect;
+
+================================================================================
+NewPrioritySelect.jsx:-
+
+import { memo, useRef } from "react";
+
+const NewPrioritySelect = memo(function({ id, options, dispatch }) {
+    const newPriorityRef = useRef(null);
+
+    return(
+        <div>
+            <h5>Change Priority</h5>
+            {
+                options.map((opt, ind) => {
+                    return(
+                        <div key={ind} >
+                            <label htmlFor={opt}>{opt}</label>
+                            <input type="radio" name="priority" id={opt} value={opt} onChange={e => {
+                                newPriorityRef.current = e.target.value;
+                            }} />
+                        </div>
+                    )
+                })
+            }
+            <button onClick={() => {
+                dispatch({
+                    type: 'CHANGE_PRIORITY',
+                    patient_id: id,
+                    new_priority: newPriorityRef.current
+                })
+                newPriorityRef.current = null
+            }}>Change Priority</button>
+        </div>
+    );
+})
+
+export default NewPrioritySelect;
+
+=================================================================================
+NewDoctorSelect.jsx:-
+
+import { memo, useRef } from "react";
+
+const NewDoctorSelect = memo(function ({ list_of_doctors, id, dispatch }) {
+    const newDoctorIdRef = useRef(null);
+
+    return (
+        <div>
+            <h5>Reassign Doctor</h5>
+            <div>
+                {
+                    list_of_doctors.map(doc => {
+                        return (
+                            <div key={doc.id}>
+                                <label htmlFor={doc.id}>{doc.name}</label>
+                                <input type="radio" name="new-doctor-select" id={doc.id} onChange={(e) => {
+                                    newDoctorIdRef.current = e.target.value;
+                                }} value={doc.id} />
+                            </div>
+                        )
+                    })
+                }
+            </div>
+            <button onClick={() => {
+                dispatch({
+                    type: 'ASSIGN_DOCTOR',
+                    patient_id: id,
+                    new_doctor_id: Number(newDoctorIdRef.current)
+                })
+            }}>Change Doctor</button>
+        </div>
+    );
+})
+
+export default NewDoctorSelect;
+
+=================================================================================
+SearchBar.jsx:-
+
+import { useContext } from "react";
+import DispatchContext from "../../ContextFiles/DispatchContext";
+
+function SearchBar() {
+    const dispatch = useContext(DispatchContext);
+
+    return(
+        <div>
+            <label htmlFor="searchbar">Enter Search: </label>
+            <input type="text" id='searchbar' placeholder="search patients record" onChange={e => {
+                dispatch({
+                    type: 'SET_SEARCH',
+                    value: e.target.value
+                })
+            }} />
+        </div>
+    );
+}
+
+export default SearchBar;
+
+===============================================================================
+FilterPanel.jsx:-
+
+import { useContext, useMemo } from "react";
+import DispatchContext from "../../ContextFiles/DispatchContext";
+import GeneralStateContext from "../../ContextFiles/GeneralStateContext";
+import DoctorFilterSelector from "./FilterPanelComponents/DoctorFilterSelector";
+import StatusFilterSelector from "./FilterPanelComponents/StatusFilterSelector";
+import PriorityFilterSelector from "./FilterPanelComponents/PriorityFilterSelector";
+
+function FilterPanel() {
+    // extract doctors from general state
+    const { doctors, patients } = useContext(GeneralStateContext);
+
+    // extract dispatch from context
+    const dispatch = useContext(DispatchContext);
+
+    const priorities = useMemo(() => {
+            return patients.reduce((acc, pat) => {
+                if(!acc.includes(pat.priority)) {
+                    acc.push(pat.priority);
+                }
+    
+                return acc
+            }, [])
+        }, []);
+
+    const statuses = useMemo(() => {
+        return patients.reduce((acc, pat) => {
+            if(!acc.includes(pat.status)) {
+                acc.push(pat.status)
+            }
+
+            return acc
+        }, [])
+
+    }, [])
+
+
+    return (
+        <div>
+            <DoctorFilterSelector doctors_list={doctors} dispatch={dispatch} />
+            <PriorityFilterSelector priorities_list={priorities} dispatch={dispatch} />
+            <StatusFilterSelector statuses_list={statuses} dispatch={dispatch} />
+
+        </div>
+    );
+}
+
+export default FilterPanel;
+
+================================================================================
+StatusFilterSelector.jsx:-
+
+import { memo } from "react";
+
+const StatusFilterSelector = memo(function ({ statuses_list, dispatch }) {
+
+    return (
+        <div>
+            <label htmlFor="status-filter">Choose status:</label>
+
+            <select id="status-filter" name="status-choice" onChange={e => {
+                dispatch({
+                    type: 'SET_STATUS_FILTER',
+                    value: e.target.value
+                })
+            }} >
+                <option value disabled selected>-- Select status --</option>
+                <option value="all">all</option>
+                {
+                    statuses_list.map((stat, ind) => {
+                        // i used index for keys here because i know they're not going to change
+                        return <option key={ind} value={stat}>{stat}</option>
+                    })
+                }
+            </select>
+        </div>
+    )
+})
+
+export default StatusFilterSelector;
+
+================================================================================
+PriorityFilterSelector.jsx:-
+
+import { memo } from "react";
+
+const PriorityFilterSelector = memo(function ({ priorities_list, dispatch }) {
+
+    return (
+        <div>
+            <label htmlFor="priority-dropdown">Choose priority:</label>
+
+            <select id="priority-dropdown" name="priority-choice" onChange={e => {
+                dispatch({
+                    type: 'SET_PRIORITY_FILTER',
+                    value: e.target.value
+                })
+            }}>
+                <option defaultValue disabled selected>-- Select priority --</option>
+                <option value="all">all</option>
+                {
+                    priorities_list.map((pri, ind) => {
+                        return <option key={ind} value={pri}>{pri}</option>
+                    })
+                }
+            </select>
+        </div>
+    )
+})
+
+export default PriorityFilterSelector;
+
+=================================================================================
+DoctorFilterSelector.jsx:-
+
+import { memo } from "react";
+
+
+const DoctorFilterSelector = memo(function ({ doctors_list, dispatch }) {
+
+
+    return (
+        <div>
+            <label htmlFor="doctor-filter">Select a Doctor:</label>
+
+            <select id="doctor-filter" name="doctor-choice" onChange={e => {
+                dispatch({
+                    type: 'SET_DOCTOR_FILTER',
+                    value: e.target.value
+                })
+            }}>
+                <option defaultValue disabled selected>-- Select a Doctor --</option>
+                <option value="all">all</option>
+                {
+                    doctors_list.map(doc => {
+                        return <option key={doc.id} id={doc.id} value={doc.id} >{doc.name}</option>
+                    })
+                }
+            </select>
+        </div>
+    )
+})
+
+export default DoctorFilterSelector;
